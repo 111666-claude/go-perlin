@@ -69,3 +69,33 @@ func ExamplePerlin_Noise3D() {
 	// 1	1	0	0.0536
 	// 1	1	1	0.1826
 }
+
+func ExamplePerlin_Ridged2DHeight() {
+	p := perlin.NewPerlin(alpha, beta, n, seed)
+	opts := perlin.DefaultRidgedOptions()
+	for _, c := range [][2]float64{{0, 0}, {0.5, 0.5}, {1, 1}} {
+		h, err := p.Ridged2DHeight(opts, c[0], c[1])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("%0.1f\t%0.1f\t%0.4f\n", c[0], c[1], h)
+	}
+	// Output:
+	// 0.0	0.0	1.9688
+	// 0.5	0.5	1.8096
+	// 1.0	1.0	1.9688
+}
+
+func ExamplePerlin_Ridged2DNormal() {
+	p := perlin.NewPerlin(alpha, beta, n, seed)
+	opts := perlin.DefaultRidgedOptions()
+	nx, ny, nz, err := p.Ridged2DNormal(opts, 0.5, 0.5)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("%0.4f\t%0.4f\t%0.4f\n", nx, ny, nz)
+	// Output:
+	// 0.5649	0.2483	0.7870
+}
