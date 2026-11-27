@@ -69,3 +69,18 @@ func ExamplePerlin_Noise3D() {
 	// 1;1;0;-0.2208
 	// 1;1;1;0.0304
 }
+
+func ExamplePerlin_Noise2DPeriodic() {
+	p := perlin.NewPerlin(alpha, beta, n, seed)
+	const width, height = 6., 4.
+	for x := 0.; x < 3; x++ {
+		fmt.Printf("%0.4f;%0.4f\n", x/2, p.Noise2DPeriodic(width, height, x/2, 1.25))
+	}
+	// A point shifted by one full period on both axes is identical.
+	fmt.Printf("%0.4f\n", p.Noise2DPeriodic(width, height, 0.5+width, 1.25+height))
+	// Output:
+	// 0.0000;0.0208
+	// 0.5000;-0.2150
+	// 1.0000;-0.1399
+	// -0.2150
+}

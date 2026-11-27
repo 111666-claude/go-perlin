@@ -263,6 +263,136 @@ func (p *Perlin) Noise2D(x, y float64) float64 {
 	return sum
 }
 
+// Noise2DPeriodic generates a tileable 2-dimensional Perlin Noise value
+// that repeats every width units along the x axis and every height
+// units along the y axis.
+//
+// The returned field is periodic both horizontally (x and x+width are
+// identical), vertically (y and y+height are identical) and across both
+// axes at once, so a rectangular texture sampled over [0,width)x[0,height)
+// tiles seamlessly: the value and its local variation (first derivative)
+// stay continuous across every edge and at the four corners.
+//
+// width and height must be positive, finite numbers and define the period
+// in the same coordinate space as x and y; they do not have to be whole
+// numbers. Either period may be smaller than a single lattice cell, in
+// which case the lowest octaves are constant along that axis. Negative or
+// non-finite coordinates are wrapped deterministically into the base tile.
+// A non-positive, NaN or infinite width or height is a programming error
+// and panics; NaN or infinite coordinates return NaN.
+//
+// Each octave is sampled on its own integer-sized torus of
+// ceil(period*frequency) cells (at least one). Coordinates are wrapped
+// before any rescaling, so queries one period apart collapse onto the same
+// wrapped input: periodicity is exact for integer periods and stays within
+// floating-point rounding for arbitrary fractional periods, for any value
+// of beta, including non-integer ones.
+func (p *Perlin) Noise2DPeriodic(width, height, x, y float64) float64 {
+	if width <= 0 || math.IsNaN(width) || math.IsInf(width, 0) ||
+		height <= 0 || math.IsNaN(height) || math.IsInf(height, 0) {
+		panic("perlin: Noise2DPeriodic requires positive, finite width and height")
+	}
+	if math.IsNaN(x) || math.IsNaN(y) || math.IsInf(x, 0) || math.IsInf(y, 0) {
+		return math.NaN()
+	}
+
+	var (
+		scale float64 = 1
+		freq  float64 = 1
+		sum   float64
+		px    [2]float64
+	)
+
+	for i := int32(0); i < p.n; i++ {
+		mx := cellsForPeriod(width, freq)
+		my := cellsForPeriod(height, freq)
+		// Map the coordinate, wrapped onto the base tile first, onto an
+		// integer torus of mx/my cells. The torus period in coordinate
+		// space stays exactly width/height while the integer cell count
+		// makes lattice wrapping seamless (value and first derivative
+		// continuous across every edge and corner). Pre-wrapping means
+		// queries one period apart collapse onto the same wrapped value.
+		px[0] = wrapCoord(x, width) / width * float64(mx)
+		px[1] = wrapCoord(y, height) / height * float64(my)
+		sum += p.noise2Periodic(px, mx, my) / scale
+		scale *= p.alpha
+		freq *= p.beta
+	}
+	return sum
+}
+
+// maxCells bounds the per-octave torus size so the lattice coordinates
+// stay safely inside int32 after the N offset, even for pathologically
+// large frequencies or octave counts.
+const maxCells = 1 << 24
+
+// cellsForPeriod returns the number of integer lattice cells an octave of
+// the given frequency needs to cover period. The result is always a
+// positive int32 so it can be used as a torus size without further checks.
+func cellsForPeriod(period, freq float64) int32 {
+	v := math.Ceil(period * freq)
+	if v < 1 || math.IsNaN(v) {
+		v = 1
+	}
+	if v > maxCells {
+		v = maxCells
+	}
+	return int32(v)
+}
+
+// wrapCoord maps v onto the half-open interval [0, period) and is
+// deterministic for negative and non-whole-number coordinates.
+func wrapCoord(v, period float64) float64 {
+	r := math.Mod(v, period)
+	if r < 0 {
+		r += period
+	}
+	return r
+}
+
+// noise2Periodic evaluates a single 2D noise octave on a torus made of
+// mx by my lattice cells. Cell coordinates wrap modulo the torus size,
+// while the permutation and gradient tables still wrap modulo their own
+// 256 entry size.
+func (p *Perlin) noise2Periodic(vec [2]float64, mx, my int32) float64 {
+	t := vec[0] + N
+	bx0 := int32(t) % mx
+	bx1 := (bx0 + 1) % mx
+	rx0 := t - float64(int32(t))
+	rx1 := rx0 - 1.
+
+	t = vec[1] + N
+	by0 := int32(t) % my
+	by1 := (by0 + 1) % my
+	ry0 := t - float64(int32(t))
+	ry1 := ry0 - 1.
+
+	i := p.p[bx0&BM]
+	j := p.p[bx1&BM]
+
+	b00 := p.p[(i+by0)&BM]
+	b10 := p.p[(j+by0)&BM]
+	b01 := p.p[(i+by1)&BM]
+	b11 := p.p[(j+by1)&BM]
+
+	sx := sCurve(rx0)
+	sy := sCurve(ry0)
+
+	q := p.g2[b00]
+	u := at2(rx0, ry0, q)
+	q = p.g2[b10]
+	v := at2(rx1, ry0, q)
+	a := lerp(sx, u, v)
+
+	q = p.g2[b01]
+	u = at2(rx0, ry1, q)
+	q = p.g2[b11]
+	v = at2(rx1, ry1, q)
+	b := lerp(sx, u, v)
+
+	return lerp(sy, a, b)
+}
+
 // Noise3D Generates 3-dimensional Perlin Noise value
 func (p *Perlin) Noise3D(x, y, z float64) float64 {
 	var scale float64 = 1
