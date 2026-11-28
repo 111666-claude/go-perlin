@@ -69,3 +69,45 @@ func ExamplePerlin_Noise3D() {
 	// 1;1;0;-0.2208
 	// 1;1;1;0.0304
 }
+
+func ExampleErode() {
+	// A noisy ridgeline sampled from Noise2D with a fixed seed, tilted so
+	// the rainfall has somewhere to flow.
+	p := perlin.NewPerlin(alpha, beta, n, seed)
+	noise, err := p.HeightMap2D(4, 1, 0.3, 0, 0)
+	if err != nil {
+		panic(err)
+	}
+	heightMap := make([]float64, len(noise))
+	for i, v := range noise {
+		heightMap[i] = v + float64(3-i) // 3, 2, 1, 0 tilt
+	}
+
+	cfg := perlin.ErosionConfig{
+		Steps:          10,
+		Precipitation:  0.5,
+		ErosionRate:    0.3,
+		DepositionRate: 0.3,
+		Evaporation:    0.1,
+		BoundaryDrain:  false,
+	}
+	result, err := perlin.Erode(heightMap, 4, 1, cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	// The simulation is deterministic: the same config and heightmap
+	// always produce the same eroded terrain and closed ledgers.
+	_, _, ok := result.WaterBalance()
+	fmt.Println("ledgers balanced:", ok)
+	for i, h := range result.Heights {
+		fmt.Printf("%d: %0.4f (eroded %0.4f, deposited %0.4f)\n",
+			i, h, result.Eroded[i], result.Deposited[i])
+	}
+	// Output:
+	// ledgers balanced: true
+	// 0: 2.3491 (eroded 0.9351, deposited 0.2842)
+	// 1: 0.9517 (eroded 1.1456, deposited 0.6129)
+	// 2: 0.6775 (eroded 0.6327, deposited 0.6406)
+	// 3: 0.2748 (eroded 0.0000, deposited 0.3196)
+}
